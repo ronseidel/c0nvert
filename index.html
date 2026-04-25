@@ -39,10 +39,130 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script>
+/* THEME INIT — runs in head before body paints. Defaults to user's system
+   theme. If user has previously overridden it in this browser, honor that.
+   Sets data-theme + inline <html> styles so nothing flashes. */
+(function() {
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var systemTheme = prefersDark ? 'dark' : 'light';
+  var saved = null;
+  try { saved = localStorage.getItem('c0nvert-theme'); } catch(e) {}
+  var theme = (saved === 'light' || saved === 'dark') ? saved : systemTheme;
+  document.documentElement.dataset.theme = theme;
+  if (theme === 'dark') {
+    document.documentElement.style.background = '#0A0F0D';
+    document.documentElement.style.color = '#E4F3EE';
+  } else {
+    document.documentElement.style.background = '#F9F9F9';
+    document.documentElement.style.color = '#034D32';
+  }
+})();
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* CHANGELOG
+   v17 — 2026-04-24 — Force file-types line break on phone widths
+     - v16's 480px breakpoint was below iPhone width — separator hid but
+       both groups still fit on one line, defeating the point
+     - Switched to forcing a flex-direction column on phone widths (≤640px)
+       so the second group always lands on a new line
+     - Tightened row-gap to 4px on phone for closer pairing
+   v16 — 2026-04-24 — File types list: visual vs time-based grouping
+     - Was crammed edge-to-edge on phone
+     - Now two semantic groups: visual (Images, HEIC, SVG, PDF)
+       and time-based (Audio, Video) separated by a vertical hairline
+     - On phones the line break naturally falls between the groups
+     - Bullets use middle-dot, group separator is a styled border
+   v15 — 2026-04-24 — App-shell layout
+     - Body is now flex column at min-height 100dvh (iOS-aware)
+     - Footer pinned to bottom
+     - Empty state: dropzone flex-grows to fill the screen, content
+       vertically centered inside — feels like an app, not a webpage
+     - With files: dropzone returns to natural size, queue takes the
+       remaining space (via :has(.queue:empty) toggle)
+     - Safe-area-inset-bottom padding for iOS home indicator
+   v14 — 2026-04-24 — Fix theme flash on first paint
+     - Body had hardcoded light inline styles; head script can only touch
+       <html> (body doesn't exist yet). Result: html=dark / body=light
+       mismatch until main script ran late.
+     - Added tiny inline script immediately after <body> opens that syncs
+       body inline styles to whatever html has. Runs before any layout.
+   v13 — 2026-04-24 — Theme toggle matches t0ck visual treatment
+     - Circular 40x40 button (border-radius: 999px) — was 36x36 rounded sq
+     - Lucide sun + moon paths, 24-viewBox, 18x18 rendered, stroke-width 2
+     - Hover transitions to var(--ink) — not accent (t0ck pattern)
+     - 0.15s ease transitions (was 120ms) — matches t0ck timing
+   v12 — 2026-04-24 — Binary theme toggle
+     - App opens in user's current system theme (light or dark)
+     - Single click flips to the opposite theme, next click flips back
+     - No 3-state AUTO mode — removed the cycling complexity
+     - Icon shows the theme you'll get if you click (the *other* one) —
+       the standard pattern every polished app uses
+   v11 — 2026-04-24 — Theme toggle (3-state, removed in v12)
+   v10 — 2026-04-24 — t0ck visual alignment
+     - Header: tagline replaced with Space Mono version stamp (t0ck pattern)
+     - All buttons: Space Mono uppercase + letter-spacing, 10px radius
+     - Active state: accent bg + --bg-colored text (inverse, brand-true)
+     - Tactile transitions: 120ms color/bg, 80ms transform, scale(0.96) on :active
+     - Size chips, aspect toggle, custom color btn: same typographic system
+     - Drop zone sub-text, chips, status text: Space Mono uppercase
+     - File cards: 14px radius, 20px padding (more breathing room)
+     - Drop zone: 16px radius, 64px vertical padding
+     - Format checkboxes: format-name in Space Mono, desc in Inter (reading text)
+     - Dark mode override: active button text uses explicit dark value (not --bg)
+   v09 — 2026-04-24 — Multi-format + bug fixes
+     - Multi-format conversion: pick PNG + JPG, or WAV + MP3, or MOV + WebM
+       with checkboxes — one Convert click produces both
+     - Per-format inline description in each checkbox row (lossy/lossless,
+       bitrate, container-swap vs re-encode mode)
+     - Custom color picker now opens near the button (was top-left): hidden
+       input absolutely positioned over the button, browser anchors picker to it
+     - Quality slider now drags smoothly (same fix as padding sliders — was
+       re-rendering DOM mid-drag)
+     - Smart video default: if input is MP4, default output is MOV; if MOV,
+       default is MP4 (was: defaulted to input format which made convert a no-op)
+     - HEIC decoder switched from heic2any (2019, breaks on modern iPhone HEIC)
+       to libheif-js v1.19.8 (current, ~1.5MB WASM, handles HEVC + HDR)
+     - Surfaces actual decode errors instead of generic wrapper message
+   v08 — 2026-04-24 — SVG UX fixes
+     - Padding sliders now drag smoothly (was: full re-render on input was
+       destroying the slider DOM mid-drag, so browser lost the mouse target)
+     - Inline label + preview updates during drag, no DOM rebuild
+     - Custom color: distinct "Custom" button with swatch preview + label,
+       visually separated from preset swatches by a divider
+       (was: native color input looked identical to preset chips)
+   v07 — 2026-04-24 — MP4↔MOV without ffmpeg
+     - In-place ftyp brand swap for MP4/MOV/M4V container conversion
+     - No ffmpeg.wasm dependency for stream-copy paths — works in artifact preview
+     - Verified output: ffprobe + `file` correctly identify as target format
+     - Memory-efficient: only the first ~32 bytes are copied, rest passed via Blob refs
+     - ffmpeg.wasm now ONLY loads for re-encode paths (WebM↔MP4/MOV)
+     - Re-encode shows clear "needs deployment with COOP/COEP" error if SAB missing
+   v06 — 2026-04-24 — SVG framing controls + live preview
+     - Output mode toggle: Match SVG aspect (default) or Square
+     - Per-side padding: horizontal and vertical sliders, % of output dimension
+     - Live preview canvas updates on every option change
+     - SVG image preloaded on file add so preview is instant
+     - Fix: custom color picker now actually engages bgColor (was a dead control)
+   v05 — 2026-04-24 — HEIC + video
+     - HEIC/HEIF input via heic2any (lazy-loaded ~5MB on first HEIC file)
+     - Video conversion via ffmpeg.wasm 0.11.6 (lazy-loaded ~25MB on first video)
+     - MP4 ↔ MOV: stream copy, no re-encode — fast and lossless (ffmpeg -c copy)
+     - WebM↔MP4/MOV: re-encode with libx264 / libvpx (slower, expected)
+     - Video card replaces "coming soon" with real options
+     - Progress callback drives per-file status text during long encodes
+     - Note: ffmpeg runs single-threaded here; multi-threaded needs COOP/COEP
+       headers at c0nvert.app deployment + ffmpeg-core 0.12.x (future v06)
+   v04 — 2026-04-24 — AIFF manual parser
+     - Bypass browser's spotty AIFF decoder; parse FORM/COMM/SSND chunks directly
+     - Supports AIFF and AIFC (NONE/twos/sowt/fl32/fl64), 8/16/24/32-bit PCM
+     - Builds AudioBuffer manually then routes to existing WAV/MP3 encoders
+     - Use case: Ableton/Logic AIF bounces that Chrome+Firefox can't decode natively
+     - Better error message when truly unsupported (no longer suggests AIF as fallback)
    v03 — 2026-04-24 — Brand zero in accent green
      - Wordmark "c0nvert" renders 0 in --accent (#028454)
      - Footer "an 0fam app" likewise greens the 0
@@ -66,9 +186,9 @@
      - margo.fyi colors, Space Mono wordmark, Inter body
      - 4-layer dark mode handling for Claude preview
    ROADMAP
-     - v03: Video via ffmpeg.wasm (mov, mp4, webm, mkv, etc.)
-     - v03: Audio FLAC/OGG/M4A output, HEIC input
-     - v04: Batch presets (e.g. "favicon set", "social sizes")
+     - v06: Multi-threaded ffmpeg via COOP/COEP headers (faster video encoding)
+     - v06: Audio FLAC/OGG/M4A output, manual WAV/FLAC parsers as decode fallback
+     - v07: Batch presets (e.g. "favicon set", "social sizes", "podcast clip")
 */
 :root {
   --bg: #F9F9F9;
@@ -84,20 +204,19 @@
   --warn: #92400E;
   --warn-bg: #FEF3C7;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0A0F0D;
-    --surface: #0F1715;
-    --ink: #E4F3EE;
-    --accent: #00BD78;
-    --accent-bg: #0F2620;
-    --border: #1F3530;
-    --muted: #7A9A8E;
-    --error: #FCA5A5;
-    --error-bg: #2A0E0E;
-    --warn: #FCD34D;
-    --warn-bg: #2A1E08;
-  }
+/* Dark mode: explicit (data-theme="dark") */
+html[data-theme="dark"] {
+  --bg: #0A0F0D;
+  --surface: #0F1715;
+  --ink: #E4F3EE;
+  --accent: #00BD78;
+  --accent-bg: #0F2620;
+  --border: #1F3530;
+  --muted: #7A9A8E;
+  --error: #FCA5A5;
+  --error-bg: #2A0E0E;
+  --warn: #FCD34D;
+  --warn-bg: #2A1E08;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -107,14 +226,36 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
   font-size: 15px;
   line-height: 1.5;
 }
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
 .wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   max-width: 920px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 32px 24px 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* When the queue is empty (no files), expand the dropzone to fill
+   available space so it reads as the primary tap target on mobile. */
+main:has(.queue:empty) .dropzone {
+  flex: 1;
 }
 header {
   display: flex;
@@ -132,49 +273,115 @@ header {
   color: var(--ink);
 }
 .wordmark .z { color: var(--accent); }
-.tagline {
-  font-size: 13px;
+.version {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--muted);
-  font-weight: 500;
 }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.theme-toggle {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+.theme-toggle .theme-icon { display: none; }
+/* Show the icon for the theme the button will switch TO. */
+html[data-theme="light"] .theme-toggle .theme-icon-dark { display: block; }
+html[data-theme="dark"] .theme-toggle .theme-icon-light { display: block; }
 .dropzone {
   border: 2px dashed var(--border);
-  border-radius: 14px;
-  padding: 56px 24px;
+  border-radius: 16px;
+  padding: 64px 24px;
   text-align: center;
   background: var(--surface);
-  transition: all 0.15s ease;
+  transition: border-color 120ms, background 120ms, transform 80ms;
   cursor: pointer;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
 }
 .dropzone:hover, .dropzone.drag {
   border-color: var(--accent);
   background: var(--accent-bg);
 }
-.dropzone.drag {
-  transform: scale(1.005);
-}
+.dropzone:active { transform: scale(0.998); }
 .dropzone-title {
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 17px;
   font-weight: 600;
-  margin: 0 0 6px 0;
+  margin: 0 0 8px 0;
   color: var(--ink);
 }
 .dropzone-sub {
-  font-size: 13px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
   color: var(--muted);
   margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  row-gap: 6px;
+}
+.formats-group {
+  white-space: nowrap;
+}
+.formats-sep {
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+}
+/* On phone widths force the two groups to stack so the visual / time-based
+   distinction reads at a glance, regardless of font width or iPhone size */
+@media (max-width: 640px) {
+  .dropzone-sub {
+    flex-direction: column;
+    row-gap: 4px;
+  }
+  .formats-sep { display: none; }
 }
 .dropzone-icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 12px;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
   display: block;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 input[type=file] { display: none; }
 .queue {
-  margin-top: 24px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -182,109 +389,128 @@ input[type=file] { display: none; }
 .file-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 14px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .file-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 .file-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   background: var(--accent-bg);
   color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Space Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.06em;
   flex-shrink: 0;
 }
 .file-meta { flex: 1; min-width: 200px; }
 .file-name {
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
   word-break: break-all;
 }
 .file-info {
-  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: 4px;
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .chip {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 3px 9px;
   background: var(--accent-bg);
   color: var(--accent);
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
 }
 .file-remove {
-  background: none;
+  background: transparent;
   border: 1px solid var(--border);
   color: var(--muted);
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 18px;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: all 120ms;
 }
-.file-remove:hover { color: var(--error); border-color: var(--error); }
+.file-remove:hover {
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-bg);
+}
+.file-remove:active { transform: scale(0.92); }
 .file-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
-  padding-top: 4px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
-  padding-top: 12px;
 }
 .opt-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .opt-label {
+  font-family: 'Space Mono', monospace;
   font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   color: var(--muted);
-  font-weight: 600;
 }
 select, input[type=number], input[type=text] {
-  font-family: inherit;
-  font-size: 13px;
-  padding: 6px 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg);
   color: var(--ink);
-  height: 32px;
+  height: 36px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
 }
 select:focus, input:focus {
   outline: none;
   border-color: var(--accent);
 }
+select:hover { border-color: var(--accent); }
 input[type=range] {
   accent-color: var(--accent);
   width: 120px;
@@ -292,28 +518,86 @@ input[type=range] {
 .size-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: 6px;
 }
 .size-chip {
   font-family: 'Space Mono', monospace;
   font-size: 12px;
-  padding: 4px 8px;
+  font-weight: 700;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
   text-align: center;
   user-select: none;
-  font-weight: 600;
   color: var(--muted);
-  transition: all 0.1s;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 80ms;
 }
 .size-chip.on {
   background: var(--accent);
-  color: white;
+  color: var(--bg);
   border-color: var(--accent);
 }
-.size-chip:hover { border-color: var(--accent); }
+.size-chip:hover:not(.on) {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.size-chip:active { transform: scale(0.94); }
+.seg {
+  display: flex;
+  gap: 4px;
+}
+.seg-chip {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 14px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 80ms;
+  white-space: nowrap;
+}
+.seg-chip.on {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.seg-chip:hover:not(.on) {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.seg-chip:active { transform: scale(0.96); }
+.svg-preview-box {
+  width: 260px;
+  height: 140px;
+  background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.svg-preview-box canvas {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+html[data-theme="dark"] .svg-preview-box {
+  background: repeating-conic-gradient(#1a1a1a 0% 25%, #0a0a0a 0% 50%) 50% / 16px 16px;
+}
 .color-row {
   display: flex;
   gap: 6px;
@@ -348,6 +632,121 @@ input[type=color] {
 }
 input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
 input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
+.color-divider {
+  display: inline-block;
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.custom-color-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 80ms;
+}
+.custom-color-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.custom-color-btn:active { transform: scale(0.96); }
+.custom-color-btn.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.custom-color-btn .custom-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.custom-color-btn .custom-label {
+  letter-spacing: 0.08em;
+}
+.custom-color-btn svg { opacity: 0.6; }
+/* Color input absolutely positioned over the button so the native picker
+   anchors to the button location instead of opening at top-left */
+.custom-color-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+/* Multi-format checkbox lists */
+.format-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  background: var(--bg);
+}
+.format-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.format-row:hover {
+  background: var(--accent-bg);
+}
+.format-row input[type=checkbox] {
+  accent-color: var(--accent);
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.format-row .format-name {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  min-width: 56px;
+}
+.format-row .format-desc {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+}
+.opt-hint {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-top: 4px;
+}
 .actions {
   display: flex;
   gap: 8px;
@@ -355,25 +754,33 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
   flex-wrap: wrap;
 }
 .btn {
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 10px;
   cursor: pointer;
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.1s;
-  height: 34px;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 80ms;
+  user-select: none;
+  white-space: nowrap;
 }
+.btn:active:not(:disabled) { transform: scale(0.96); }
 .btn-primary {
   background: var(--accent);
-  color: white;
+  color: var(--bg);
   border-color: var(--accent);
 }
-.btn-primary:hover { background: var(--ink); border-color: var(--ink); }
+.btn-primary:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+}
 .btn-primary:disabled {
   background: var(--border);
   border-color: var(--border);
@@ -381,15 +788,24 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
   color: var(--muted);
 }
 .btn-secondary {
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
   border-color: var(--border);
 }
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-secondary:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+html[data-theme="dark"] .btn-primary { color: #0a1612; }
+html[data-theme="dark"] .btn-primary:hover { color: var(--ink); }
 .status {
-  font-size: 12px;
-  color: var(--muted);
   font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -411,38 +827,42 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 16px;
-  padding-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 .bulk-left { display: flex; gap: 8px; flex-wrap: wrap; }
 .banner {
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  margin-top: 16px;
+  margin-top: 14px;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 .banner.warn { background: var(--warn-bg); color: var(--warn); }
 .banner.info { background: var(--accent-bg); color: var(--accent); }
 .banner-icon { flex-shrink: 0; font-weight: 700; }
 footer {
-  margin-top: 64px;
-  padding-top: 24px;
+  margin-top: 32px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
-  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--muted);
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  font-family: 'Space Mono', monospace;
 }
-footer a { color: var(--muted); text-decoration: none; }
+footer a { color: var(--muted); text-decoration: none; transition: color 120ms; }
 footer a:hover { color: var(--accent); }
 .preset-row {
   display: flex;
@@ -461,67 +881,120 @@ footer a:hover { color: var(--accent); }
 }
 .preset-chip:hover { color: var(--accent); border-color: var(--accent); }
 @media (max-width: 600px) {
-  .wrap { padding: 20px 16px 60px; }
-  .dropzone { padding: 40px 16px; }
+  .wrap { padding: 20px 16px 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .dropzone { padding: 40px 16px; min-height: 240px; }
   .file-options { flex-direction: column; align-items: stretch; }
   .opt-group { width: 100%; }
 }
 </style>
 </head>
 <body style="background:#F9F9F9;color:#034D32">
+<script>
+/* Body just parsed. Sync its inline styles to the theme already established
+   on <html> by the head script. Prevents a one-frame flash where html is
+   dark but body is still light. Runs before any visible layout. */
+document.body.style.background = document.documentElement.style.background;
+document.body.style.color = document.documentElement.style.color;
+</script>
 <div class="wrap">
   <header>
     <div class="wordmark">c<span class="z">0</span>nvert</div>
-    <div class="tagline">file converter — runs in your browser, no uploads</div>
+    <div class="header-right">
+      <div class="version">v17 · 20260424</div>
+      <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme" title="Toggle theme">
+        <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/>
+          <path d="M12 20v2"/>
+          <path d="m4.93 4.93 1.41 1.41"/>
+          <path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/>
+          <path d="M20 12h2"/>
+          <path d="m6.34 17.66-1.41 1.41"/>
+          <path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+        <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </div>
   </header>
 
-  <div class="dropzone" id="dropzone">
-    <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="17 8 12 3 7 8"/>
-      <line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-    <p class="dropzone-title">Drop files here or click to browse</p>
-    <p class="dropzone-sub">Images · SVG · PDF · Audio &nbsp;·&nbsp; Video coming in v02</p>
-    <input type="file" id="file-input" multiple>
-  </div>
-
-  <div class="queue" id="queue"></div>
-
-  <div class="bulk-actions" id="bulk-actions" style="display:none">
-    <div class="bulk-left">
-      <button class="btn btn-secondary" id="add-more">Add more files</button>
-      <button class="btn btn-secondary" id="clear-all">Clear all</button>
+  <main>
+    <div class="dropzone" id="dropzone">
+      <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p class="dropzone-title">Drop files here or click to browse</p>
+      <p class="dropzone-sub">
+        <span class="formats-group">Images · HEIC · SVG · PDF</span>
+        <span class="formats-sep" aria-hidden="true"></span>
+        <span class="formats-group">Audio · Video</span>
+      </p>
+      <input type="file" id="file-input" multiple>
     </div>
-    <button class="btn btn-primary" id="convert-all">Convert all</button>
-  </div>
+
+    <div class="queue" id="queue"></div>
+
+    <div class="bulk-actions" id="bulk-actions" style="display:none">
+      <div class="bulk-left">
+        <button class="btn btn-secondary" id="add-more">Add more files</button>
+        <button class="btn btn-secondary" id="clear-all">Clear all</button>
+      </div>
+      <button class="btn btn-primary" id="convert-all">Convert all</button>
+    </div>
+  </main>
 
   <footer>
-    <span>c<span style="color:var(--accent)">0</span>nvert · v03 · 2026-04-24</span>
+    <span>c<span style="color:var(--accent)">0</span>nvert · v17 · 20260424</span>
     <span><a href="https://0utput.co" target="_blank" rel="noopener">an <span style="color:var(--accent)">0</span>fam app</a></span>
   </footer>
 </div>
 
 <script>
-// ============ DARK MODE: 4-LAYER FALLBACK ============
-(function setDarkMode() {
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.style.background = '#0A0F0D';
-    document.documentElement.style.color = '#E4F3EE';
-    document.body.style.background = '#0A0F0D';
-    document.body.style.color = '#E4F3EE';
+// ============ THEME MANAGER ============
+// Binary light↔dark toggle. App opens in system theme. Click flips to the
+// opposite; click again flips back. No 3-state auto mode. Layers updated:
+//   1. html[data-theme] — drives CSS vars
+//   2. inline style on <html> + <body> — 4-layer fallback
+//   3. <meta name="theme-color"> — mobile browser chrome
+
+function getCurrentTheme() {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('c0nvert-theme', theme); } catch {}
+  const bg = theme === 'dark' ? '#0A0F0D' : '#F9F9F9';
+  const fg = theme === 'dark' ? '#E4F3EE' : '#034D32';
+  document.documentElement.style.background = bg;
+  document.documentElement.style.color = fg;
+  if (document.body) {
+    document.body.style.background = bg;
+    document.body.style.color = fg;
   }
-  if (window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-      const bg = e.matches ? '#0A0F0D' : '#F9F9F9';
-      const fg = e.matches ? '#E4F3EE' : '#034D32';
-      document.documentElement.style.background = bg;
-      document.documentElement.style.color = fg;
-      document.body.style.background = bg;
-      document.body.style.color = fg;
-    });
+  // Update the non-media theme-color tag for mobile chrome bar
+  let metaTc = document.querySelector('meta[name="theme-color"]:not([media])');
+  if (!metaTc) {
+    metaTc = document.createElement('meta');
+    metaTc.name = 'theme-color';
+    document.head.appendChild(metaTc);
   }
-})();
+  metaTc.content = bg;
+}
+
+function toggleTheme() {
+  applyTheme(getCurrentTheme() === 'dark' ? 'light' : 'dark');
+}
+
+// Sync body + meta with whatever the head script set on <html>
+applyTheme(getCurrentTheme());
+
+// Wire up the toggle button
+document.querySelector('[data-theme-toggle]')?.addEventListener('click', toggleTheme);
 
 // ============ PDF.JS WORKER SETUP ============
 if (window.pdfjsLib) {
@@ -536,6 +1009,7 @@ const state = {
 
 // ============ FORMAT DETECTION ============
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
+const HEIC_EXTS = ['heic', 'heif'];
 const SVG_EXTS = ['svg'];
 const PDF_EXTS = ['pdf'];
 const AUDIO_EXTS = ['mp3', 'wav', 'aif', 'aiff', 'm4a', 'ogg', 'flac', 'aac', 'opus'];
@@ -548,6 +1022,7 @@ function getExt(filename) {
 
 function categorize(file) {
   const ext = getExt(file.name);
+  if (HEIC_EXTS.includes(ext)) return 'image';
   if (SVG_EXTS.includes(ext)) return 'svg';
   if (IMAGE_EXTS.includes(ext)) return 'image';
   if (PDF_EXTS.includes(ext)) return 'pdf';
@@ -563,18 +1038,25 @@ function categorize(file) {
 function defaultOptions(category, ext) {
   switch (category) {
     case 'image':
-      return { format: 'png', quality: 0.92 };
+      return { formats: ['png'], quality: 0.92 };
     case 'svg':
-      return { format: 'png', sizes: [256, 512], bgColor: 'transparent', customBg: '#FFFFFF' };
+      return { format: 'png', sizes: [256, 512], bgColor: 'transparent', customBg: '#FFFFFF', paddingH: 0, paddingV: 0, aspectMode: 'match' };
     case 'pdf':
       return { format: 'png', scale: 2 };
     case 'audio':
-      return { format: 'wav', mp3Bitrate: 192 };
+      return { formats: ['wav'], mp3Bitrate: 192 };
     case 'video':
-      return { format: 'mp4' };
+      // Smart default: target something other than the input format
+      return { formats: [smartVideoTarget(ext)], mp3Bitrate: 192 };
     default:
       return {};
   }
+}
+
+function smartVideoTarget(ext) {
+  if (ext === 'mp4' || ext === 'm4v') return 'mov';
+  if (ext === 'mov') return 'mp4';
+  return 'mp4'; // default for webm, mkv, etc.
 }
 
 function fmtSize(bytes) {
@@ -615,7 +1097,7 @@ function addFiles(fileList) {
   Array.from(fileList).forEach(file => {
     const ext = getExt(file.name);
     const category = categorize(file);
-    state.files.push({
+    const entry = {
       id: state.nextId++,
       file,
       ext,
@@ -623,10 +1105,24 @@ function addFiles(fileList) {
       options: defaultOptions(category, ext),
       status: 'ready',
       results: [],
-    });
+    };
+    state.files.push(entry);
+    // Preload SVG so preview is instant
+    if (category === 'svg') {
+      loadSvgImage(entry).then(() => renderQueue()).catch(() => {});
+    }
   });
   fileInput.value = '';
   renderQueue();
+}
+
+async function loadSvgImage(f) {
+  if (f._svgImg) return f._svgImg;
+  const text = await f.file.text();
+  // Use data URL so the Image stays valid for the file's lifetime without manual revoke
+  const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(text);
+  f._svgImg = await loadImage(dataUrl);
+  return f._svgImg;
 }
 
 function removeFile(id) {
@@ -684,26 +1180,42 @@ function renderStatus(f) {
 
 function renderOptions(f) {
   switch (f.category) {
-    case 'image':
+    case 'image': {
+      const formats = f.options.formats || ['png'];
+      const hasLossy = formats.some(x => x === 'jpg' || x === 'webp');
       return `
         <div class="file-options">
-          <div class="opt-group">
-            <label class="opt-label">Output</label>
-            <select data-opt="format">
-              <option value="png" ${f.options.format === 'png' ? 'selected' : ''}>PNG</option>
-              <option value="jpg" ${f.options.format === 'jpg' ? 'selected' : ''}>JPG</option>
-              <option value="webp" ${f.options.format === 'webp' ? 'selected' : ''}>WebP</option>
-            </select>
+          <div class="opt-group" style="flex:1; min-width:240px;">
+            <label class="opt-label">Output formats</label>
+            <div class="format-list">
+              <label class="format-row">
+                <input type="checkbox" data-format-check value="png" ${formats.includes('png') ? 'checked' : ''}>
+                <span class="format-name">PNG</span>
+                <span class="format-desc">Lossless, supports transparency</span>
+              </label>
+              <label class="format-row">
+                <input type="checkbox" data-format-check value="jpg" ${formats.includes('jpg') ? 'checked' : ''}>
+                <span class="format-name">JPG</span>
+                <span class="format-desc">Smaller, lossy, no transparency</span>
+              </label>
+              <label class="format-row">
+                <input type="checkbox" data-format-check value="webp" ${formats.includes('webp') ? 'checked' : ''}>
+                <span class="format-name">WebP</span>
+                <span class="format-desc">Modern, smaller than JPG</span>
+              </label>
+            </div>
           </div>
-          ${f.options.format !== 'png' ? `
-          <div class="opt-group">
-            <label class="opt-label">Quality · <span data-q-out>${Math.round(f.options.quality * 100)}</span></label>
-            <input type="range" min="10" max="100" value="${Math.round(f.options.quality * 100)}" data-opt="quality">
+          ${hasLossy ? `
+          <div class="opt-group" style="min-width:200px;">
+            <label class="opt-label">Quality · <span data-pad-value="quality">${Math.round(f.options.quality * 100)}</span>%</label>
+            <input type="range" min="10" max="100" value="${Math.round(f.options.quality * 100)}" data-pad-slider="quality" style="width:100%">
+            <span class="opt-hint">Applies to JPG / WebP</span>
           </div>` : ''}
         </div>`;
+    }
     case 'svg':
       return `
-        <div class="file-options">
+        <div class="file-options svg-options">
           <div class="opt-group">
             <label class="opt-label">Output</label>
             <select data-opt="format">
@@ -711,8 +1223,15 @@ function renderOptions(f) {
               <option value="jpg" ${f.options.format === 'jpg' ? 'selected' : ''}>JPG</option>
             </select>
           </div>
+          <div class="opt-group">
+            <label class="opt-label">Aspect</label>
+            <div class="seg">
+              <div class="seg-chip ${f.options.aspectMode === 'match' ? 'on' : ''}" data-aspect="match">Match SVG</div>
+              <div class="seg-chip ${f.options.aspectMode === 'square' ? 'on' : ''}" data-aspect="square">Square</div>
+            </div>
+          </div>
           <div class="opt-group" style="flex:1; min-width: 220px;">
-            <label class="opt-label">Sizes (px)</label>
+            <label class="opt-label">${f.options.aspectMode === 'square' ? 'Sizes (px)' : 'Longest edge (px)'}</label>
             <div class="size-grid">
               ${[16, 32, 64, 128, 256, 512, 1024, 2048].map(s =>
                 `<div class="size-chip ${f.options.sizes.includes(s) ? 'on' : ''}" data-size="${s}">${s}</div>`
@@ -727,7 +1246,29 @@ function renderOptions(f) {
               <div class="color-chip ${f.options.bgColor === '#000000' ? 'on' : ''}" data-bg="#000000" style="background:#000000" title="Black"></div>
               <div class="color-chip ${f.options.bgColor === '#034D32' ? 'on' : ''}" data-bg="#034D32" style="background:#034D32" title="Brand ink"></div>
               <div class="color-chip ${f.options.bgColor === '#00BD78' ? 'on' : ''}" data-bg="#00BD78" style="background:#00BD78" title="Brand mint"></div>
-              <input type="color" value="${f.options.customBg}" data-opt="customBg" title="Custom">
+              <span class="color-divider"></span>
+              <div class="custom-color-btn ${f.options.bgColor === 'custom' ? 'on' : ''}">
+                <span class="custom-swatch" style="background:${f.options.customBg}"></span>
+                <span class="custom-label">Custom</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <input type="color" value="${f.options.customBg}" data-custom-color class="custom-color-input">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="file-options" style="border-top:none; padding-top:0;">
+          <div class="opt-group" style="min-width:200px; flex:1;">
+            <label class="opt-label">Padding H · <span data-pad-value="paddingH">${f.options.paddingH}</span>%</label>
+            <input type="range" min="0" max="40" value="${f.options.paddingH}" data-pad-slider="paddingH" style="width:100%">
+          </div>
+          <div class="opt-group" style="min-width:200px; flex:1;">
+            <label class="opt-label">Padding V · <span data-pad-value="paddingV">${f.options.paddingV}</span>%</label>
+            <input type="range" min="0" max="40" value="${f.options.paddingV}" data-pad-slider="paddingV" style="width:100%">
+          </div>
+          <div class="opt-group" style="width:260px;">
+            <label class="opt-label">Preview</label>
+            <div class="svg-preview-box">
+              <canvas data-svg-preview></canvas>
             </div>
           </div>
         </div>`;
@@ -750,19 +1291,28 @@ function renderOptions(f) {
             </select>
           </div>
         </div>`;
-    case 'audio':
+    case 'audio': {
+      const formats = f.options.formats || ['wav'];
       return `
         <div class="file-options">
-          <div class="opt-group">
-            <label class="opt-label">Output</label>
-            <select data-opt="format">
-              <option value="wav" ${f.options.format === 'wav' ? 'selected' : ''}>WAV (lossless)</option>
-              <option value="mp3" ${f.options.format === 'mp3' ? 'selected' : ''}>MP3</option>
-            </select>
+          <div class="opt-group" style="flex:1; min-width:240px;">
+            <label class="opt-label">Output formats</label>
+            <div class="format-list">
+              <label class="format-row">
+                <input type="checkbox" data-format-check value="wav" ${formats.includes('wav') ? 'checked' : ''}>
+                <span class="format-name">WAV</span>
+                <span class="format-desc">Lossless, larger files</span>
+              </label>
+              <label class="format-row">
+                <input type="checkbox" data-format-check value="mp3" ${formats.includes('mp3') ? 'checked' : ''}>
+                <span class="format-name">MP3</span>
+                <span class="format-desc">Compressed, universal compatibility</span>
+              </label>
+            </div>
           </div>
-          ${f.options.format === 'mp3' ? `
+          ${formats.includes('mp3') ? `
           <div class="opt-group">
-            <label class="opt-label">Bitrate</label>
+            <label class="opt-label">MP3 bitrate</label>
             <select data-opt="mp3Bitrate">
               <option value="128" ${f.options.mp3Bitrate == 128 ? 'selected' : ''}>128 kbps</option>
               <option value="192" ${f.options.mp3Bitrate == 192 ? 'selected' : ''}>192 kbps</option>
@@ -771,12 +1321,37 @@ function renderOptions(f) {
             </select>
           </div>` : ''}
         </div>`;
-    case 'video':
+    }
+    case 'video': {
+      const inGroup = ['mp4', 'mov', 'm4v'];
+      const formats = f.options.formats || [];
+      const allOptions = ['mp4', 'mov', 'webm'].filter(o => o !== f.ext);
       return `
+        <div class="file-options">
+          <div class="opt-group" style="flex:1; min-width:280px;">
+            <label class="opt-label">Output formats</label>
+            <div class="format-list">
+              ${allOptions.map(fmt => {
+                const willStreamCopy = inGroup.includes(f.ext) && inGroup.includes(fmt);
+                const desc = willStreamCopy
+                  ? '<span style="color:var(--accent)">●</span> Container swap — instant, lossless'
+                  : '<span style="color:var(--warn)">●</span> Re-encode — needs deployed COOP/COEP headers';
+                return `
+                  <label class="format-row">
+                    <input type="checkbox" data-format-check value="${fmt}" ${formats.includes(fmt) ? 'checked' : ''}>
+                    <span class="format-name">${fmt.toUpperCase()}</span>
+                    <span class="format-desc">${desc}</span>
+                  </label>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        ${f.file.size > 200 * 1024 * 1024 ? `
         <div class="banner warn">
           <span class="banner-icon">⚠</span>
-          <span>Video conversion is coming in v02 — uses ffmpeg.wasm (~30MB load). For now this file will be skipped.</span>
-        </div>`;
+          <span>Large file (${fmtSize(f.file.size)}). Re-encoding may run out of browser memory; container swap should still work.</span>
+        </div>` : ''}`;
+    }
     default:
       return `
         <div class="banner warn">
@@ -787,7 +1362,7 @@ function renderOptions(f) {
 }
 
 function renderActions(f) {
-  if (f.category === 'unknown' || f.category === 'video') return '';
+  if (f.category === 'unknown') return '';
   if (f.status === 'done' && f.results.length > 0) {
     return `
       <button class="btn btn-primary" data-download>Download${f.results.length > 1 ? ` (${f.results.length} files)` : ''}</button>
@@ -810,7 +1385,7 @@ function bindFileCard(card, f) {
     renderQueue();
   });
 
-  // Generic option binders
+  // Generic option binders (NOT padding — those are wired separately for drag perf)
   card.querySelectorAll('[data-opt]').forEach(input => {
     const key = input.dataset.opt;
     input.addEventListener('input', e => {
@@ -818,8 +1393,41 @@ function bindFileCard(card, f) {
       if (key === 'quality') val = parseInt(val) / 100;
       else if (key === 'scale' || key === 'mp3Bitrate') val = parseInt(val);
       f.options[key] = val;
-      // Re-render some sections that depend on options
+      // Re-render: format changes affect available sub-options
       if (key === 'format' || key === 'quality') renderQueue();
+    });
+  });
+
+  // Format checkboxes (multi-select for image/audio/video)
+  card.querySelectorAll('[data-format-check]').forEach(check => {
+    check.addEventListener('change', e => {
+      const fmt = e.target.value;
+      if (!f.options.formats) f.options.formats = [];
+      if (e.target.checked) {
+        if (!f.options.formats.includes(fmt)) f.options.formats.push(fmt);
+      } else {
+        f.options.formats = f.options.formats.filter(x => x !== fmt);
+      }
+      renderQueue();
+    });
+  });
+
+  // Padding sliders + quality slider — update inline without re-rendering, so drag stays attached
+  card.querySelectorAll('[data-pad-slider]').forEach(slider => {
+    const key = slider.dataset.padSlider;
+    slider.addEventListener('input', e => {
+      const raw = parseInt(e.target.value);
+      const val = (key === 'quality') ? raw / 100 : raw;
+      f.options[key] = val;
+      // Update value label inline
+      const label = card.querySelector(`[data-pad-value="${key}"]`);
+      if (label) label.textContent = raw;
+      // Re-render preview canvas in place (only relevant for SVG)
+      const previewCanvas = card.querySelector('[data-svg-preview]');
+      if (previewCanvas && f._svgImg && f.options.sizes && f.options.sizes.length > 0) {
+        const previewSize = Math.max(...f.options.sizes);
+        try { renderSvgToCanvas(f, previewCanvas, previewSize); } catch {}
+      }
     });
   });
 
@@ -835,13 +1443,42 @@ function bindFileCard(card, f) {
     });
   });
 
-  // SVG bg color
+  // SVG aspect mode toggle
+  card.querySelectorAll('[data-aspect]').forEach(el => {
+    el.addEventListener('click', () => {
+      f.options.aspectMode = el.dataset.aspect;
+      renderQueue();
+    });
+  });
+
+  // SVG/image bg preset chips
   card.querySelectorAll('[data-bg]').forEach(el => {
     el.addEventListener('click', () => {
       f.options.bgColor = el.dataset.bg;
       renderQueue();
     });
   });
+
+  // Custom color: input is positioned over the button so it captures clicks itself
+  const customInput = card.querySelector('[data-custom-color]');
+  if (customInput) {
+    customInput.addEventListener('input', e => {
+      f.options.customBg = e.target.value;
+      f.options.bgColor = 'custom';
+      renderQueue();
+    });
+  }
+
+  // SVG live preview (initial render)
+  const previewCanvas = card.querySelector('[data-svg-preview]');
+  if (previewCanvas && f._svgImg && f.options.sizes.length > 0) {
+    const previewSize = Math.max(...f.options.sizes);
+    try {
+      renderSvgToCanvas(f, previewCanvas, previewSize);
+    } catch (err) {
+      console.warn('Preview render failed', err);
+    }
+  }
 }
 
 function escapeHtml(s) {
@@ -860,10 +1497,14 @@ async function convertFile(f) {
   f.results = [];
   try {
     switch (f.category) {
-      case 'image': await convertImage(f); break;
+      case 'image':
+        if (HEIC_EXTS.includes(f.ext)) await convertHeic(f);
+        else await convertImage(f);
+        break;
       case 'svg': await convertSvg(f); break;
       case 'pdf': await convertPdf(f); break;
       case 'audio': await convertAudio(f); break;
+      case 'video': await convertVideo(f); break;
       default: throw new Error('Unsupported category');
     }
     setStatus(f, 'done', `${f.results.length} file${f.results.length === 1 ? '' : 's'}`);
@@ -875,7 +1516,7 @@ async function convertFile(f) {
 
 async function convertAll() {
   for (const f of state.files) {
-    if (f.status === 'ready' && f.category !== 'unknown' && f.category !== 'video') {
+    if (f.status === 'ready' && f.category !== 'unknown') {
       await convertFile(f);
     }
   }
@@ -883,70 +1524,99 @@ async function convertAll() {
 
 // ============ IMAGE CONVERTER ============
 async function convertImage(f) {
+  const formats = f.options.formats || ['png'];
+  if (formats.length === 0) throw new Error('Pick at least one output format');
+
   setStatus(f, 'converting', 'reading image...');
   const dataUrl = await readAsDataURL(f.file);
   const img = await loadImage(dataUrl);
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d');
-
-  // For JPG, fill white background since JPG doesn't support transparency
-  if (f.options.format === 'jpg') {
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-  ctx.drawImage(img, 0, 0);
-
-  setStatus(f, 'converting', 'encoding...');
-  const blob = await canvasToBlob(canvas, f.options.format, f.options.quality);
   const baseName = stripExt(f.file.name);
-  f.results.push({ name: `${baseName}.${f.options.format}`, blob });
+
+  for (const fmt of formats) {
+    setStatus(f, 'converting', `encoding ${fmt}...`);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (fmt === 'jpg') {
+      // JPG has no alpha — fill white before drawing
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    ctx.drawImage(img, 0, 0);
+    const blob = await canvasToBlob(canvas, fmt, f.options.quality);
+    f.results.push({ name: `${baseName}.${fmt}`, blob });
+  }
 }
 
 // ============ SVG CONVERTER ============
+// Computes output dimensions for a given longest-edge size, given the svg's
+// natural aspect ratio and the user's aspect mode.
+function svgOutputDims(svgImg, size, aspectMode) {
+  if (aspectMode === 'square') return { w: size, h: size };
+  const aspect = svgImg.naturalWidth / svgImg.naturalHeight;
+  if (aspect >= 1) return { w: size, h: Math.round(size / aspect) };
+  return { w: Math.round(size * aspect), h: size };
+}
+
+// Resolve the user's effective bg color (transparent | hex | "custom" → customBg)
+function svgEffectiveBg(opts) {
+  if (opts.bgColor === 'transparent') return null;
+  if (opts.bgColor === 'custom') return opts.customBg;
+  return opts.bgColor;
+}
+
+// Renders the SVG to the given canvas at output size, applying padding + bg.
+// Used by both the live preview and the actual conversion.
+function renderSvgToCanvas(f, canvas, size) {
+  const { w: outW, h: outH } = svgOutputDims(f._svgImg, size, f.options.aspectMode);
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, outW, outH);
+
+  // Background fill (jpg has no alpha so always fill — fall back to white if user picked transparent)
+  let bg = svgEffectiveBg(f.options);
+  if (!bg && f.options.format === 'jpg') bg = '#FFFFFF';
+  if (bg) {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, outW, outH);
+  }
+
+  // Inner area after padding (each side gets the % applied)
+  const padX = (f.options.paddingH / 100) * outW;
+  const padY = (f.options.paddingV / 100) * outH;
+  const innerW = Math.max(1, outW - 2 * padX);
+  const innerH = Math.max(1, outH - 2 * padY);
+
+  // Fit the SVG inside the inner rectangle while preserving its aspect
+  const svgAspect = f._svgImg.naturalWidth / f._svgImg.naturalHeight;
+  const innerAspect = innerW / innerH;
+  let drawW, drawH;
+  if (svgAspect > innerAspect) {
+    drawW = innerW;
+    drawH = innerW / svgAspect;
+  } else {
+    drawH = innerH;
+    drawW = innerH * svgAspect;
+  }
+  const dx = (outW - drawW) / 2;
+  const dy = (outH - drawH) / 2;
+  ctx.drawImage(f._svgImg, dx, dy, drawW, drawH);
+}
+
 async function convertSvg(f) {
   if (f.options.sizes.length === 0) throw new Error('Pick at least one size');
   setStatus(f, 'converting', 'reading svg...');
-  const text = await f.file.text();
+  await loadSvgImage(f);
 
-  // Parse and render
-  const blob = new Blob([text], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await loadImage(url);
-
-    for (const size of f.options.sizes) {
-      setStatus(f, 'converting', `rendering ${size}px...`);
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-
-      if (f.options.bgColor === 'transparent' && f.options.format === 'jpg') {
-        ctx.fillStyle = '#FFFFFF'; // jpg can't be transparent
-      } else if (f.options.bgColor !== 'transparent') {
-        ctx.fillStyle = f.options.bgColor;
-      }
-      if (f.options.bgColor !== 'transparent' || f.options.format === 'jpg') {
-        ctx.fillRect(0, 0, size, size);
-      }
-
-      // Preserve aspect ratio: fit inside box
-      const aspect = img.naturalWidth / img.naturalHeight;
-      let w = size, h = size;
-      if (aspect > 1) h = size / aspect;
-      else if (aspect < 1) w = size * aspect;
-      const x = (size - w) / 2;
-      const y = (size - h) / 2;
-      ctx.drawImage(img, x, y, w, h);
-
-      const outBlob = await canvasToBlob(canvas, f.options.format, 0.95);
-      const baseName = stripExt(f.file.name);
-      f.results.push({ name: `${baseName}-${size}.${f.options.format}`, blob: outBlob });
-    }
-  } finally {
-    URL.revokeObjectURL(url);
+  for (const size of f.options.sizes) {
+    setStatus(f, 'converting', `rendering ${size}px...`);
+    const canvas = document.createElement('canvas');
+    renderSvgToCanvas(f, canvas, size);
+    const outBlob = await canvasToBlob(canvas, f.options.format, 0.95);
+    const baseName = stripExt(f.file.name);
+    f.results.push({ name: `${baseName}-${size}.${f.options.format}`, blob: outBlob });
   }
 }
 
@@ -983,44 +1653,207 @@ async function convertPdf(f) {
 let lameLoaded = null;
 async function loadLame() {
   if (lameLoaded) return lameLoaded;
-  lameLoaded = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
-    script.onload = () => {
-      if (window.lamejs) resolve(window.lamejs);
-      else reject(new Error('lamejs failed to initialize'));
-    };
-    script.onerror = () => reject(new Error('Could not load MP3 encoder'));
-    document.head.appendChild(script);
-  });
+  lameLoaded = loadScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js')
+    .then(() => {
+      if (!window.lamejs) throw new Error('lamejs failed to initialize');
+      return window.lamejs;
+    });
   return lameLoaded;
 }
 
 async function convertAudio(f) {
-  setStatus(f, 'converting', 'decoding audio...');
+  const formats = f.options.formats || ['wav'];
+  if (formats.length === 0) throw new Error('Pick at least one output format');
+
+  setStatus(f, 'converting', 'reading audio...');
   const buf = await f.file.arrayBuffer();
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   const ctx = new AudioCtx();
   let decoded;
+
+  const isAiff = f.ext === 'aif' || f.ext === 'aiff';
   try {
-    decoded = await ctx.decodeAudioData(buf.slice(0));
+    if (isAiff) {
+      setStatus(f, 'converting', 'parsing aiff...');
+      decoded = await parseAiff(buf, ctx);
+    } else {
+      setStatus(f, 'converting', 'decoding audio...');
+      decoded = await ctx.decodeAudioData(buf.slice(0));
+    }
   } catch (err) {
-    throw new Error(`Browser couldn't decode this audio (${f.ext}). Try WAV/MP3/AIF/OGG.`);
+    console.error('Audio decode error:', err);
+    throw new Error(`Couldn't decode this ${f.ext.toUpperCase()} file. The format may not be supported in your browser.`);
   }
+
   const baseName = stripExt(f.file.name);
 
-  if (f.options.format === 'wav') {
-    setStatus(f, 'converting', 'encoding wav...');
-    const wav = encodeWav(decoded);
-    f.results.push({ name: `${baseName}.wav`, blob: new Blob([wav], { type: 'audio/wav' }) });
-  } else if (f.options.format === 'mp3') {
-    setStatus(f, 'converting', 'loading mp3 encoder...');
-    await loadLame();
-    setStatus(f, 'converting', 'encoding mp3...');
-    const mp3 = encodeMp3(decoded, f.options.mp3Bitrate);
-    f.results.push({ name: `${baseName}.mp3`, blob: new Blob([mp3], { type: 'audio/mp3' }) });
+  for (const fmt of formats) {
+    if (fmt === 'wav') {
+      setStatus(f, 'converting', 'encoding wav...');
+      const wav = encodeWav(decoded);
+      f.results.push({ name: `${baseName}.wav`, blob: new Blob([wav], { type: 'audio/wav' }) });
+    } else if (fmt === 'mp3') {
+      setStatus(f, 'converting', 'loading mp3 encoder...');
+      await loadLame();
+      setStatus(f, 'converting', 'encoding mp3...');
+      const mp3 = encodeMp3(decoded, f.options.mp3Bitrate);
+      f.results.push({ name: `${baseName}.mp3`, blob: new Blob([mp3], { type: 'audio/mp3' }) });
+    }
   }
   ctx.close && ctx.close();
+}
+
+// ============ AIFF PARSER ============
+// AIFF/AIFC container parser. Browser decodeAudioData has unreliable AIFF support
+// (works in Safari, often fails in Chrome/Firefox). Standard PCM AIFF is simple
+// enough to parse manually — chunked structure with COMM (format) and SSND (samples).
+async function parseAiff(arrayBuffer, audioContext) {
+  const view = new DataView(arrayBuffer);
+  const total = arrayBuffer.byteLength;
+  if (total < 12) throw new Error('AIFF too short');
+
+  // FORM <size> AIFF/AIFC header
+  if (readFourCC(view, 0) !== 'FORM') throw new Error('Not an AIFF file (no FORM)');
+  const formType = readFourCC(view, 8);
+  if (formType !== 'AIFF' && formType !== 'AIFC') throw new Error('Not AIFF/AIFC: ' + formType);
+
+  let numChannels = 0, numFrames = 0, bitDepth = 0, sampleRate = 0;
+  let pcmData = null;
+  let compressionType = 'NONE';
+
+  let offset = 12;
+  while (offset <= total - 8) {
+    const chunkId = readFourCC(view, offset);
+    const chunkSize = view.getUint32(offset + 4, false); // big-endian
+    const chunkStart = offset + 8;
+
+    if (chunkId === 'COMM') {
+      numChannels = view.getUint16(chunkStart, false);
+      numFrames = view.getUint32(chunkStart + 2, false);
+      bitDepth = view.getUint16(chunkStart + 6, false);
+      sampleRate = readExtended80(view, chunkStart + 8);
+      if (formType === 'AIFC' && chunkSize >= 22) {
+        compressionType = readFourCC(view, chunkStart + 18);
+      }
+    } else if (chunkId === 'SSND') {
+      const dataOffset = view.getUint32(chunkStart, false);
+      // const blockSize = view.getUint32(chunkStart + 4, false); // typically 0
+      const sampleStart = chunkStart + 8 + dataOffset;
+      const sampleLen = chunkSize - 8 - dataOffset;
+      pcmData = new Uint8Array(arrayBuffer, sampleStart, sampleLen);
+    }
+
+    // Chunks are word-aligned; advance with even-padding.
+    offset = chunkStart + chunkSize + (chunkSize & 1);
+  }
+
+  if (!pcmData) throw new Error('AIFF missing SSND chunk');
+  if (!numChannels || !sampleRate) throw new Error('AIFF missing COMM chunk');
+
+  const channels = aiffPcmToFloat32(pcmData, numChannels, bitDepth, numFrames, compressionType);
+
+  const audioBuffer = audioContext.createBuffer(numChannels, numFrames, sampleRate);
+  for (let c = 0; c < numChannels; c++) audioBuffer.copyToChannel(channels[c], c);
+  return audioBuffer;
+}
+
+function readFourCC(view, offset) {
+  return String.fromCharCode(
+    view.getUint8(offset),
+    view.getUint8(offset + 1),
+    view.getUint8(offset + 2),
+    view.getUint8(offset + 3),
+  );
+}
+
+// IEEE 754 80-bit extended precision (used by AIFF for sample rate). Big-endian.
+function readExtended80(view, offset) {
+  const expHi = view.getUint16(offset, false);
+  const sign = (expHi & 0x8000) ? -1 : 1;
+  const exp = expHi & 0x7FFF;
+  const hi = view.getUint32(offset + 2, false);
+  const lo = view.getUint32(offset + 6, false);
+  if (exp === 0 && hi === 0 && lo === 0) return 0;
+  if (exp === 0x7FFF) return sign * (hi || lo ? NaN : Infinity);
+  // 80-bit extended has explicit leading 1 bit (no implicit one like 32/64-bit IEEE)
+  const mantissa = hi * 0x100000000 + lo;
+  return sign * mantissa * Math.pow(2, exp - 16383 - 63);
+}
+
+function aiffPcmToFloat32(pcm, numChannels, bitDepth, numFrames, compressionType) {
+  const ct = compressionType.toLowerCase();
+  // Compression types we handle:
+  //   NONE / twos    → signed PCM, big-endian (standard AIFF)
+  //   sowt           → signed PCM, little-endian (byte-swapped)
+  //   fl32 / FL32    → 32-bit IEEE float, big-endian
+  //   fl64 / FL64    → 64-bit IEEE float, big-endian
+  const isLE = (ct === 'sowt');
+  const isFloat32 = (ct === 'fl32');
+  const isFloat64 = (ct === 'fl64');
+
+  const channels = [];
+  for (let c = 0; c < numChannels; c++) channels.push(new Float32Array(numFrames));
+
+  const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+
+  if (isFloat32) {
+    const stride = numChannels * 4;
+    for (let i = 0; i < numFrames; i++) {
+      for (let c = 0; c < numChannels; c++) {
+        channels[c][i] = view.getFloat32(i * stride + c * 4, isLE);
+      }
+    }
+    return channels;
+  }
+  if (isFloat64) {
+    const stride = numChannels * 8;
+    for (let i = 0; i < numFrames; i++) {
+      for (let c = 0; c < numChannels; c++) {
+        channels[c][i] = view.getFloat64(i * stride + c * 8, isLE);
+      }
+    }
+    return channels;
+  }
+
+  // Integer PCM
+  if (![8, 16, 24, 32].includes(bitDepth)) {
+    throw new Error(`Unsupported AIFF bit depth: ${bitDepth}`);
+  }
+  if (ct !== 'none' && ct !== 'twos' && ct !== 'sowt' && compressionType !== '') {
+    throw new Error(`Unsupported AIFC compression: ${compressionType}`);
+  }
+
+  const bytesPerSample = bitDepth / 8;
+  const stride = numChannels * bytesPerSample;
+
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      const o = i * stride + c * bytesPerSample;
+      let val = 0;
+      if (bitDepth === 8) {
+        val = view.getInt8(o) / 0x80;
+      } else if (bitDepth === 16) {
+        val = view.getInt16(o, isLE) / 0x8000;
+      } else if (bitDepth === 24) {
+        // 24-bit signed; rebuild from 3 bytes with proper sign extension
+        let high, mid, low;
+        if (isLE) {
+          low = view.getUint8(o);
+          mid = view.getUint8(o + 1);
+          high = view.getInt8(o + 2); // signed top byte → sign-extends through <<
+        } else {
+          high = view.getInt8(o);
+          mid = view.getUint8(o + 1);
+          low = view.getUint8(o + 2);
+        }
+        val = ((high << 16) | (mid << 8) | low) / 0x800000;
+      } else if (bitDepth === 32) {
+        val = view.getInt32(o, isLE) / 0x80000000;
+      }
+      channels[c][i] = val;
+    }
+  }
+  return channels;
 }
 
 // WAV encoder (16-bit PCM)
@@ -1114,6 +1947,244 @@ function encodeMp3(audioBuffer, kbps) {
   let off = 0;
   chunks.forEach(c => { out.set(c, off); off += c.length; });
   return out;
+}
+
+// ============ DYNAMIC SCRIPT LOADER ============
+const _scriptCache = {};
+function loadScript(src) {
+  if (_scriptCache[src]) return _scriptCache[src];
+  _scriptCache[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+  return _scriptCache[src];
+}
+
+// ============ HEIC CONVERTER ============
+// Uses libheif-js v1.19.x — current upstream port of libheif (the standard
+// HEIF/HEIC codec library). Replaced heic2any (2019, fails on modern iPhone
+// HEIC with HEVC + depth maps + multi-image effects).
+let _libheifPromise = null;
+async function loadLibHeif() {
+  if (_libheifPromise) return _libheifPromise;
+  _libheifPromise = (async () => {
+    await loadScript('https://cdn.jsdelivr.net/npm/libheif-js@1.19.8/libheif-wasm/libheif-bundle.js');
+    if (!window.libheif) throw new Error('libheif-js failed to load from CDN');
+    // libheif() is an emscripten-style async loader returning the module
+    const lib = await window.libheif();
+    return lib;
+  })();
+  return _libheifPromise;
+}
+
+async function convertHeic(f) {
+  const formats = f.options.formats || ['jpg'];
+  if (formats.length === 0) throw new Error('Pick at least one output format');
+
+  setStatus(f, 'converting', 'loading HEIC decoder (~1.5MB)...');
+  const lib = await loadLibHeif();
+
+  setStatus(f, 'converting', 'decoding HEIC...');
+  const decoder = new lib.HeifDecoder();
+  const buf = new Uint8Array(await f.file.arrayBuffer());
+
+  let images;
+  try {
+    images = decoder.decode(buf);
+  } catch (err) {
+    throw new Error(`HEIC decode failed: ${err.message || err}`);
+  }
+  if (!images || images.length === 0) {
+    throw new Error('HEIC decoder returned no images. The file may be corrupt or use an unsupported variant.');
+  }
+
+  const baseName = stripExt(f.file.name);
+
+  for (let i = 0; i < images.length; i++) {
+    const heifImg = images[i];
+    const w = heifImg.get_width();
+    const h = heifImg.get_height();
+
+    setStatus(f, 'converting', `rendering image ${i + 1}/${images.length}...`);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(w, h);
+
+    await new Promise((resolve, reject) => {
+      try {
+        heifImg.display(imageData, (result) => {
+          if (!result) reject(new Error('HEIC display callback returned null'));
+          else resolve();
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+    ctx.putImageData(imageData, 0, 0);
+
+    for (const fmt of formats) {
+      setStatus(f, 'converting', `encoding ${fmt}...`);
+      let outCanvas = canvas;
+      if (fmt === 'jpg') {
+        // JPG has no alpha — composite over white
+        const c2 = document.createElement('canvas');
+        c2.width = w; c2.height = h;
+        const ctx2 = c2.getContext('2d');
+        ctx2.fillStyle = '#FFFFFF';
+        ctx2.fillRect(0, 0, w, h);
+        ctx2.drawImage(canvas, 0, 0);
+        outCanvas = c2;
+      }
+      const blob = await canvasToBlob(outCanvas, fmt, f.options.quality ?? 0.92);
+      const suffix = images.length > 1 ? `-${String(i + 1).padStart(2, '0')}` : '';
+      f.results.push({ name: `${baseName}${suffix}.${fmt}`, blob });
+    }
+  }
+}
+
+// ============ VIDEO CONVERTER ============
+// MP4 / MOV / M4V are all ISO base media files containing the same H.264/AAC
+// streams — the only meaningful difference is the brand identifier in the ftyp
+// atom at the start. We can flip the brand bytes in place without re-encoding.
+// CRITICAL: ftyp size MUST stay identical, otherwise all internal byte offsets
+// (chunk offsets in moov/stco) become wrong and the file breaks. So we swap
+// brand bytes in place rather than rebuilding the atom.
+function remuxIsoBrand(arrayBuffer, targetFormat) {
+  const u8 = new Uint8Array(arrayBuffer);
+  if (u8.byteLength < 16) throw new Error('File too short to be a valid MP4/MOV');
+
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const ftypSize = dv.getUint32(0, false);
+  const atomType = String.fromCharCode(u8[4], u8[5], u8[6], u8[7]);
+
+  if (atomType !== 'ftyp') {
+    throw new Error('First atom is not ftyp — non-standard MP4/MOV layout');
+  }
+  if (ftypSize === 1) {
+    throw new Error('ftyp uses extended 64-bit size (unusual)');
+  }
+  if (ftypSize < 16 || ftypSize > u8.byteLength) {
+    throw new Error('ftyp size invalid');
+  }
+
+  const brands = {
+    mp4: { major: 'mp42', firstCompat: 'isom' },
+    m4v: { major: 'M4V ', firstCompat: 'mp42' },
+    mov: { major: 'qt  ', firstCompat: 'qt  ' },
+  };
+  const b = brands[targetFormat];
+  if (!b) throw new Error(`Unsupported target format: ${targetFormat}`);
+
+  // Copy only the ftyp bytes (small) and modify brand fields. Rest of file is
+  // referenced via Blob parts so we don't double its memory.
+  const newFtyp = new Uint8Array(ftypSize);
+  newFtyp.set(u8.subarray(0, ftypSize));
+  for (let i = 0; i < 4; i++) newFtyp[8 + i] = b.major.charCodeAt(i);
+  if (ftypSize >= 20) {
+    for (let i = 0; i < 4; i++) newFtyp[16 + i] = b.firstCompat.charCodeAt(i);
+  }
+
+  return [newFtyp, u8.subarray(ftypSize)];
+}
+
+let _ffmpegPromise = null;
+async function loadFFmpeg() {
+  if (_ffmpegPromise) return _ffmpegPromise;
+  if (typeof SharedArrayBuffer === 'undefined') {
+    throw new Error('Re-encoding video requires SharedArrayBuffer, which needs cross-origin isolation. This works at c0nvert.app deployment with COOP/COEP headers, but not in the artifact preview. MP4↔MOV stream copy still works here.');
+  }
+  _ffmpegPromise = (async () => {
+    await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+    if (!window.FFmpeg) throw new Error('ffmpeg.wasm failed to load');
+    const { createFFmpeg } = window.FFmpeg;
+    const instance = createFFmpeg({
+      log: false,
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    });
+    await instance.load();
+    return instance;
+  })();
+  return _ffmpegPromise;
+}
+
+function videoCanStreamCopy(inExt, outExt) {
+  const isoFamily = ['mp4', 'mov', 'm4v'];
+  return isoFamily.includes(inExt) && isoFamily.includes(outExt);
+}
+
+async function convertVideo(f) {
+  const formats = f.options.formats || [];
+  if (formats.length === 0) throw new Error('Pick at least one output format');
+
+  const baseName = stripExt(f.file.name);
+
+  // Cache the file's bytes once if any format needs them (all do)
+  let buf = null;
+  const ensureBuf = async () => {
+    if (!buf) {
+      setStatus(f, 'converting', 'reading file...');
+      buf = await f.file.arrayBuffer();
+    }
+    return buf;
+  };
+
+  for (const fmt of formats) {
+    if (videoCanStreamCopy(f.ext, fmt)) {
+      // Pure-JS brand swap, no ffmpeg needed
+      const data = await ensureBuf();
+      setStatus(f, 'converting', `rewriting ${fmt.toUpperCase()} container...`);
+      const parts = remuxIsoBrand(data, fmt);
+      const mime = fmt === 'mov' ? 'video/quicktime' : 'video/mp4';
+      const blob = new Blob(parts, { type: mime });
+      f.results.push({ name: `${baseName}.${fmt}`, blob });
+    } else {
+      // Re-encode path needs ffmpeg.wasm
+      setStatus(f, 'converting', 'loading video engine (~25MB)...');
+      const ffmpeg = await loadFFmpeg();
+      const { fetchFile } = window.FFmpeg;
+      const inName = `input.${f.ext}`;
+      const outName = `output.${fmt}`;
+      setStatus(f, 'converting', `preparing ${fmt.toUpperCase()} encode...`);
+      ffmpeg.FS('writeFile', inName, await fetchFile(f.file));
+
+      const args = fmt === 'webm'
+        ? ['-i', inName, '-c:v', 'libvpx-vp9', '-b:v', '1M', '-c:a', 'libopus', outName]
+        : ['-i', inName, '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-c:a', 'aac', '-movflags', '+faststart', outName];
+
+      ffmpeg.setProgress(({ ratio }) => {
+        if (ratio > 0 && ratio <= 1) {
+          const pct = Math.round(ratio * 100);
+          setStatus(f, 'converting', `encoding ${fmt.toUpperCase()} ${pct}%...`);
+        }
+      });
+
+      try {
+        await ffmpeg.run(...args);
+      } catch (err) {
+        try { ffmpeg.FS('unlink', inName); } catch {}
+        throw new Error(`${fmt.toUpperCase()} re-encode failed: ${err.message || 'ffmpeg error'}`);
+      }
+
+      let data;
+      try {
+        data = ffmpeg.FS('readFile', outName);
+      } catch {
+        throw new Error(`${fmt.toUpperCase()} encode produced no output`);
+      }
+      try { ffmpeg.FS('unlink', inName); } catch {}
+      try { ffmpeg.FS('unlink', outName); } catch {}
+
+      const mime = fmt === 'webm' ? 'video/webm' : `video/${fmt}`;
+      f.results.push({ name: `${baseName}.${fmt}`, blob: new Blob([data.buffer], { type: mime }) });
+    }
+  }
 }
 
 // ============ DOWNLOAD ============
