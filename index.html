@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#F9F9F9;color:#034D32">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+
+<title>c0nvert — file converter</title>
+<meta name="description" content="Browser-based file converter. Drop files, pick a format, done. Images, SVG, PDF pages, audio. No uploads, no signups.">
+<link rel="canonical" href="https://c0nvert.app/">
+
+<!-- Theme color: light + dark -->
+<meta name="theme-color" content="#F9F9F9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A0F0D" media="(prefers-color-scheme: dark)">
+
+<!-- Favicons -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23034D32'/%3E%3Cellipse cx='16' cy='16' rx='7' ry='10' fill='none' stroke='%2300BD78' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%2300BD78'/%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="/favicon.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="c0nvert">
+<meta property="og:title" content="c0nvert — file converter">
+<meta property="og:description" content="Browser-based file converter. Drop files, pick a format, done. Images, SVG, PDF pages, audio. No uploads, no signups.">
+<meta property="og:url" content="https://c0nvert.app/">
+<meta property="og:image" content="https://c0nvert.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="c0nvert — file converter. Runs in your browser.">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="c0nvert — file converter">
+<meta name="twitter:description" content="Drop files, pick format, done. Images, SVG, PDF, audio. Runs in your browser.">
+<meta name="twitter:image" content="https://c0nvert.app/og.png">
+<meta name="twitter:image:alt" content="c0nvert — file converter. Runs in your browser.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* CHANGELOG
+   v03 — 2026-04-24 — Brand zero in accent green
+     - Wordmark "c0nvert" renders 0 in --accent (#028454)
+     - Footer "an 0fam app" likewise greens the 0
+     - OG image regenerated with same treatment
+     - Pattern matches t0ck and 0utput precedent: brand mark steps forward
+   v02 — 2026-04-24 — Meta + social + favicon pass
+     - Inline SVG favicon (dotted zero) + PNG fallback + apple-touch-icon
+     - OG tags (title, description, url, image 1200x630, alt, site_name)
+     - Twitter card tags (summary_large_image)
+     - Description meta + canonical URL
+     - theme-color for light + dark
+     - Deploy notes: drop /og.png, /favicon.png, /apple-touch-icon.png at web root
+   v01 — 2026-04-24 — Initial build
+     - Drop zone, multi-file queue, per-file controls
+     - Images: PNG/JPG/WebP with quality slider
+     - SVG → PNG/JPG with multi-size + bg color (transparent supported)
+     - PDF → PNG/JPG per page at 1x/2x/3x
+     - Audio → WAV (Web Audio API)
+     - Audio → MP3 (lamejs, lazy-loaded on first MP3 conversion)
+     - JSZip bundle when one input produces multiple outputs
+     - margo.fyi colors, Space Mono wordmark, Inter body
+     - 4-layer dark mode handling for Claude preview
+   ROADMAP
+     - v03: Video via ffmpeg.wasm (mov, mp4, webm, mkv, etc.)
+     - v03: Audio FLAC/OGG/M4A output, HEIC input
+     - v04: Batch presets (e.g. "favicon set", "social sizes")
+*/
+:root {
+  --bg: #F9F9F9;
+  --surface: #FFFFFF;
+  --ink: #034D32;
+  --accent: #028454;
+  --accent-bg: #E4F3EE;
+  --border: #C0DDD4;
+  --mint: #00BD78;
+  --muted: #6B8B7F;
+  --error: #B91C1C;
+  --error-bg: #FEE2E2;
+  --warn: #92400E;
+  --warn-bg: #FEF3C7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0A0F0D;
+    --surface: #0F1715;
+    --ink: #E4F3EE;
+    --accent: #00BD78;
+    --accent-bg: #0F2620;
+    --border: #1F3530;
+    --muted: #7A9A8E;
+    --error: #FCA5A5;
+    --error-bg: #2A0E0E;
+    --warn: #FCD34D;
+    --warn-bg: #2A1E08;
+  }
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.wordmark {
+  font-family: 'Space Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.wordmark .z { color: var(--accent); }
+.tagline {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 56px 24px;
+  text-align: center;
+  background: var(--surface);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  position: relative;
+}
+.dropzone:hover, .dropzone.drag {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.dropzone.drag {
+  transform: scale(1.005);
+}
+.dropzone-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: var(--ink);
+}
+.dropzone-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+.dropzone-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  display: block;
+  opacity: 0.7;
+}
+input[type=file] { display: none; }
+.queue {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.file-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.file-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.file-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.file-meta { flex: 1; min-width: 200px; }
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-all;
+}
+.file-info {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.file-remove {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.file-remove:hover { color: var(--error); border-color: var(--error); }
+.file-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.opt-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+select, input[type=number], input[type=text] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  height: 32px;
+}
+select:focus, input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+input[type=range] {
+  accent-color: var(--accent);
+  width: 120px;
+}
+.size-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.size-chip {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  text-align: center;
+  user-select: none;
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.1s;
+}
+.size-chip.on {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.size-chip:hover { border-color: var(--accent); }
+.color-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  position: relative;
+}
+.color-chip.on { border-color: var(--accent); }
+.color-chip.transparent {
+  background: linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%),
+              linear-gradient(45deg, #fff 25%, #ddd 25%, #ddd 75%, #fff 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  background-color: #ddd;
+  border: 1px solid var(--border);
+}
+.color-chip.transparent.on { border: 2px solid var(--accent); }
+input[type=color] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+}
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.1s;
+  height: 34px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--ink); border-color: var(--ink); }
+.btn-primary:disabled {
+  background: var(--border);
+  border-color: var(--border);
+  cursor: not-allowed;
+  color: var(--muted);
+}
+.btn-secondary {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--border);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.status {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status.done { color: var(--accent); }
+.status.error { color: var(--error); }
+.status.warn { color: var(--warn); }
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.bulk-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bulk-left { display: flex; gap: 8px; flex-wrap: wrap; }
+.banner {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 16px;
+}
+.banner.warn { background: var(--warn-bg); color: var(--warn); }
+.banner.info { background: var(--accent-bg); color: var(--accent); }
+.banner-icon { flex-shrink: 0; font-weight: 700; }
+footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: 'Space Mono', monospace;
+}
+footer a { color: var(--muted); text-decoration: none; }
+footer a:hover { color: var(--accent); }
+.preset-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.preset-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 500;
+}
+.preset-chip:hover { color: var(--accent); border-color: var(--accent); }
+@media (max-width: 600px) {
+  .wrap { padding: 20px 16px 60px; }
+  .dropzone { padding: 40px 16px; }
+  .file-options { flex-direction: column; align-items: stretch; }
+  .opt-group { width: 100%; }
+}
+</style>
+</head>
+<body style="background:#F9F9F9;color:#034D32">
+<div class="wrap">
+  <header>
+    <div class="wordmark">c<span class="z">0</span>nvert</div>
+    <div class="tagline">file converter — runs in your browser, no uploads</div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    <p class="dropzone-title">Drop files here or click to browse</p>
+    <p class="dropzone-sub">Images · SVG · PDF · Audio &nbsp;·&nbsp; Video coming in v02</p>
+    <input type="file" id="file-input" multiple>
+  </div>
+
+  <div class="queue" id="queue"></div>
+
+  <div class="bulk-actions" id="bulk-actions" style="display:none">
+    <div class="bulk-left">
+      <button class="btn btn-secondary" id="add-more">Add more files</button>
+      <button class="btn btn-secondary" id="clear-all">Clear all</button>
+    </div>
+    <button class="btn btn-primary" id="convert-all">Convert all</button>
+  </div>
+
+  <footer>
+    <span>c<span style="color:var(--accent)">0</span>nvert · v03 · 2026-04-24</span>
+    <span><a href="https://0utput.co" target="_blank" rel="noopener">an <span style="color:var(--accent)">0</span>fam app</a></span>
+  </footer>
+</div>
+
+<script>
+// ============ DARK MODE: 4-LAYER FALLBACK ============
+(function setDarkMode() {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.style.background = '#0A0F0D';
+    document.documentElement.style.color = '#E4F3EE';
+    document.body.style.background = '#0A0F0D';
+    document.body.style.color = '#E4F3EE';
+  }
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      const bg = e.matches ? '#0A0F0D' : '#F9F9F9';
+      const fg = e.matches ? '#E4F3EE' : '#034D32';
+      document.documentElement.style.background = bg;
+      document.documentElement.style.color = fg;
+      document.body.style.background = bg;
+      document.body.style.color = fg;
+    });
+  }
+})();
+
+// ============ PDF.JS WORKER SETUP ============
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ============ STATE ============
+const state = {
+  files: [], // { id, file, category, ext, options, status, results }
+  nextId: 1,
+};
+
+// ============ FORMAT DETECTION ============
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
+const SVG_EXTS = ['svg'];
+const PDF_EXTS = ['pdf'];
+const AUDIO_EXTS = ['mp3', 'wav', 'aif', 'aiff', 'm4a', 'ogg', 'flac', 'aac', 'opus'];
+const VIDEO_EXTS = ['mov', 'mp4', 'webm', 'mkv', 'avi', 'flv', 'wmv', 'm4v'];
+
+function getExt(filename) {
+  const m = filename.toLowerCase().match(/\.([^.]+)$/);
+  return m ? m[1] : '';
+}
+
+function categorize(file) {
+  const ext = getExt(file.name);
+  if (SVG_EXTS.includes(ext)) return 'svg';
+  if (IMAGE_EXTS.includes(ext)) return 'image';
+  if (PDF_EXTS.includes(ext)) return 'pdf';
+  if (AUDIO_EXTS.includes(ext)) return 'audio';
+  if (VIDEO_EXTS.includes(ext)) return 'video';
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('audio/')) return 'audio';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type === 'application/pdf') return 'pdf';
+  return 'unknown';
+}
+
+function defaultOptions(category, ext) {
+  switch (category) {
+    case 'image':
+      return { format: 'png', quality: 0.92 };
+    case 'svg':
+      return { format: 'png', sizes: [256, 512], bgColor: 'transparent', customBg: '#FFFFFF' };
+    case 'pdf':
+      return { format: 'png', scale: 2 };
+    case 'audio':
+      return { format: 'wav', mp3Bitrate: 192 };
+    case 'video':
+      return { format: 'mp4' };
+    default:
+      return {};
+  }
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+// ============ FILE INTAKE ============
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => addFiles(e.target.files));
+
+['dragenter', 'dragover'].forEach(ev => {
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); });
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); });
+});
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+document.getElementById('add-more').addEventListener('click', () => fileInput.click());
+document.getElementById('clear-all').addEventListener('click', () => {
+  state.files = [];
+  renderQueue();
+});
+document.getElementById('convert-all').addEventListener('click', convertAll);
+
+function addFiles(fileList) {
+  Array.from(fileList).forEach(file => {
+    const ext = getExt(file.name);
+    const category = categorize(file);
+    state.files.push({
+      id: state.nextId++,
+      file,
+      ext,
+      category,
+      options: defaultOptions(category, ext),
+      status: 'ready',
+      results: [],
+    });
+  });
+  fileInput.value = '';
+  renderQueue();
+}
+
+function removeFile(id) {
+  state.files = state.files.filter(f => f.id !== id);
+  renderQueue();
+}
+
+// ============ RENDER ============
+const queueEl = document.getElementById('queue');
+const bulkEl = document.getElementById('bulk-actions');
+
+function renderQueue() {
+  queueEl.innerHTML = '';
+  bulkEl.style.display = state.files.length ? 'flex' : 'none';
+
+  state.files.forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = renderFileCard(f);
+    queueEl.appendChild(card);
+    bindFileCard(card, f);
+  });
+}
+
+function renderFileCard(f) {
+  return `
+    <div class="file-head">
+      <div class="file-icon">${(f.ext || '?').toUpperCase().slice(0, 4)}</div>
+      <div class="file-meta">
+        <div class="file-name">${escapeHtml(f.file.name)}</div>
+        <div class="file-info">
+          <span>${fmtSize(f.file.size)}</span>
+          <span class="chip">${f.category}</span>
+        </div>
+      </div>
+      <div class="status ${f.status === 'done' ? 'done' : f.status === 'error' ? 'error' : f.status === 'warn' ? 'warn' : ''}" data-status>
+        ${renderStatus(f)}
+      </div>
+      <button class="file-remove" data-remove title="Remove">×</button>
+    </div>
+    ${renderOptions(f)}
+    <div class="actions">
+      ${renderActions(f)}
+    </div>
+  `;
+}
+
+function renderStatus(f) {
+  if (f.status === 'converting') return `<span class="spinner"></span> ${f.statusText || 'converting...'}`;
+  if (f.status === 'done') return `✓ ${f.statusText || 'done'}`;
+  if (f.status === 'error') return `× ${f.statusText || 'error'}`;
+  if (f.status === 'warn') return `⚠ ${f.statusText || 'warn'}`;
+  return 'ready';
+}
+
+function renderOptions(f) {
+  switch (f.category) {
+    case 'image':
+      return `
+        <div class="file-options">
+          <div class="opt-group">
+            <label class="opt-label">Output</label>
+            <select data-opt="format">
+              <option value="png" ${f.options.format === 'png' ? 'selected' : ''}>PNG</option>
+              <option value="jpg" ${f.options.format === 'jpg' ? 'selected' : ''}>JPG</option>
+              <option value="webp" ${f.options.format === 'webp' ? 'selected' : ''}>WebP</option>
+            </select>
+          </div>
+          ${f.options.format !== 'png' ? `
+          <div class="opt-group">
+            <label class="opt-label">Quality · <span data-q-out>${Math.round(f.options.quality * 100)}</span></label>
+            <input type="range" min="10" max="100" value="${Math.round(f.options.quality * 100)}" data-opt="quality">
+          </div>` : ''}
+        </div>`;
+    case 'svg':
+      return `
+        <div class="file-options">
+          <div class="opt-group">
+            <label class="opt-label">Output</label>
+            <select data-opt="format">
+              <option value="png" ${f.options.format === 'png' ? 'selected' : ''}>PNG</option>
+              <option value="jpg" ${f.options.format === 'jpg' ? 'selected' : ''}>JPG</option>
+            </select>
+          </div>
+          <div class="opt-group" style="flex:1; min-width: 220px;">
+            <label class="opt-label">Sizes (px)</label>
+            <div class="size-grid">
+              ${[16, 32, 64, 128, 256, 512, 1024, 2048].map(s =>
+                `<div class="size-chip ${f.options.sizes.includes(s) ? 'on' : ''}" data-size="${s}">${s}</div>`
+              ).join('')}
+            </div>
+          </div>
+          <div class="opt-group">
+            <label class="opt-label">Background</label>
+            <div class="color-row">
+              <div class="color-chip transparent ${f.options.bgColor === 'transparent' ? 'on' : ''}" data-bg="transparent" title="Transparent"></div>
+              <div class="color-chip ${f.options.bgColor === '#FFFFFF' ? 'on' : ''}" data-bg="#FFFFFF" style="background:#FFFFFF;border:1px solid #ddd" title="White"></div>
+              <div class="color-chip ${f.options.bgColor === '#000000' ? 'on' : ''}" data-bg="#000000" style="background:#000000" title="Black"></div>
+              <div class="color-chip ${f.options.bgColor === '#034D32' ? 'on' : ''}" data-bg="#034D32" style="background:#034D32" title="Brand ink"></div>
+              <div class="color-chip ${f.options.bgColor === '#00BD78' ? 'on' : ''}" data-bg="#00BD78" style="background:#00BD78" title="Brand mint"></div>
+              <input type="color" value="${f.options.customBg}" data-opt="customBg" title="Custom">
+            </div>
+          </div>
+        </div>`;
+    case 'pdf':
+      return `
+        <div class="file-options">
+          <div class="opt-group">
+            <label class="opt-label">Output</label>
+            <select data-opt="format">
+              <option value="png" ${f.options.format === 'png' ? 'selected' : ''}>PNG per page</option>
+              <option value="jpg" ${f.options.format === 'jpg' ? 'selected' : ''}>JPG per page</option>
+            </select>
+          </div>
+          <div class="opt-group">
+            <label class="opt-label">Resolution</label>
+            <select data-opt="scale">
+              <option value="1" ${f.options.scale == 1 ? 'selected' : ''}>1x · standard</option>
+              <option value="2" ${f.options.scale == 2 ? 'selected' : ''}>2x · retina</option>
+              <option value="3" ${f.options.scale == 3 ? 'selected' : ''}>3x · print</option>
+            </select>
+          </div>
+        </div>`;
+    case 'audio':
+      return `
+        <div class="file-options">
+          <div class="opt-group">
+            <label class="opt-label">Output</label>
+            <select data-opt="format">
+              <option value="wav" ${f.options.format === 'wav' ? 'selected' : ''}>WAV (lossless)</option>
+              <option value="mp3" ${f.options.format === 'mp3' ? 'selected' : ''}>MP3</option>
+            </select>
+          </div>
+          ${f.options.format === 'mp3' ? `
+          <div class="opt-group">
+            <label class="opt-label">Bitrate</label>
+            <select data-opt="mp3Bitrate">
+              <option value="128" ${f.options.mp3Bitrate == 128 ? 'selected' : ''}>128 kbps</option>
+              <option value="192" ${f.options.mp3Bitrate == 192 ? 'selected' : ''}>192 kbps</option>
+              <option value="256" ${f.options.mp3Bitrate == 256 ? 'selected' : ''}>256 kbps</option>
+              <option value="320" ${f.options.mp3Bitrate == 320 ? 'selected' : ''}>320 kbps</option>
+            </select>
+          </div>` : ''}
+        </div>`;
+    case 'video':
+      return `
+        <div class="banner warn">
+          <span class="banner-icon">⚠</span>
+          <span>Video conversion is coming in v02 — uses ffmpeg.wasm (~30MB load). For now this file will be skipped.</span>
+        </div>`;
+    default:
+      return `
+        <div class="banner warn">
+          <span class="banner-icon">⚠</span>
+          <span>Unrecognized file type. Supported: images, SVG, PDF, audio.</span>
+        </div>`;
+  }
+}
+
+function renderActions(f) {
+  if (f.category === 'unknown' || f.category === 'video') return '';
+  if (f.status === 'done' && f.results.length > 0) {
+    return `
+      <button class="btn btn-primary" data-download>Download${f.results.length > 1 ? ` (${f.results.length} files)` : ''}</button>
+      <button class="btn btn-secondary" data-reconvert>Convert again</button>
+    `;
+  }
+  return `<button class="btn btn-primary" data-convert ${f.status === 'converting' ? 'disabled' : ''}>Convert</button>`;
+}
+
+function bindFileCard(card, f) {
+  // Remove
+  card.querySelector('[data-remove]').addEventListener('click', () => removeFile(f.id));
+
+  // Convert / download / reconvert
+  card.querySelector('[data-convert]')?.addEventListener('click', () => convertFile(f));
+  card.querySelector('[data-download]')?.addEventListener('click', () => downloadResults(f));
+  card.querySelector('[data-reconvert]')?.addEventListener('click', () => {
+    f.status = 'ready';
+    f.results = [];
+    renderQueue();
+  });
+
+  // Generic option binders
+  card.querySelectorAll('[data-opt]').forEach(input => {
+    const key = input.dataset.opt;
+    input.addEventListener('input', e => {
+      let val = e.target.value;
+      if (key === 'quality') val = parseInt(val) / 100;
+      else if (key === 'scale' || key === 'mp3Bitrate') val = parseInt(val);
+      f.options[key] = val;
+      // Re-render some sections that depend on options
+      if (key === 'format' || key === 'quality') renderQueue();
+    });
+  });
+
+  // SVG sizes
+  card.querySelectorAll('[data-size]').forEach(el => {
+    el.addEventListener('click', () => {
+      const size = parseInt(el.dataset.size);
+      const idx = f.options.sizes.indexOf(size);
+      if (idx >= 0) f.options.sizes.splice(idx, 1);
+      else f.options.sizes.push(size);
+      f.options.sizes.sort((a, b) => a - b);
+      renderQueue();
+    });
+  });
+
+  // SVG bg color
+  card.querySelectorAll('[data-bg]').forEach(el => {
+    el.addEventListener('click', () => {
+      f.options.bgColor = el.dataset.bg;
+      renderQueue();
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function setStatus(f, status, text) {
+  f.status = status;
+  f.statusText = text;
+  renderQueue();
+}
+
+// ============ CONVERSION DISPATCH ============
+async function convertFile(f) {
+  setStatus(f, 'converting', 'starting...');
+  f.results = [];
+  try {
+    switch (f.category) {
+      case 'image': await convertImage(f); break;
+      case 'svg': await convertSvg(f); break;
+      case 'pdf': await convertPdf(f); break;
+      case 'audio': await convertAudio(f); break;
+      default: throw new Error('Unsupported category');
+    }
+    setStatus(f, 'done', `${f.results.length} file${f.results.length === 1 ? '' : 's'}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(f, 'error', err.message || 'failed');
+  }
+}
+
+async function convertAll() {
+  for (const f of state.files) {
+    if (f.status === 'ready' && f.category !== 'unknown' && f.category !== 'video') {
+      await convertFile(f);
+    }
+  }
+}
+
+// ============ IMAGE CONVERTER ============
+async function convertImage(f) {
+  setStatus(f, 'converting', 'reading image...');
+  const dataUrl = await readAsDataURL(f.file);
+  const img = await loadImage(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+
+  // For JPG, fill white background since JPG doesn't support transparency
+  if (f.options.format === 'jpg') {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(img, 0, 0);
+
+  setStatus(f, 'converting', 'encoding...');
+  const blob = await canvasToBlob(canvas, f.options.format, f.options.quality);
+  const baseName = stripExt(f.file.name);
+  f.results.push({ name: `${baseName}.${f.options.format}`, blob });
+}
+
+// ============ SVG CONVERTER ============
+async function convertSvg(f) {
+  if (f.options.sizes.length === 0) throw new Error('Pick at least one size');
+  setStatus(f, 'converting', 'reading svg...');
+  const text = await f.file.text();
+
+  // Parse and render
+  const blob = new Blob([text], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+
+    for (const size of f.options.sizes) {
+      setStatus(f, 'converting', `rendering ${size}px...`);
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      if (f.options.bgColor === 'transparent' && f.options.format === 'jpg') {
+        ctx.fillStyle = '#FFFFFF'; // jpg can't be transparent
+      } else if (f.options.bgColor !== 'transparent') {
+        ctx.fillStyle = f.options.bgColor;
+      }
+      if (f.options.bgColor !== 'transparent' || f.options.format === 'jpg') {
+        ctx.fillRect(0, 0, size, size);
+      }
+
+      // Preserve aspect ratio: fit inside box
+      const aspect = img.naturalWidth / img.naturalHeight;
+      let w = size, h = size;
+      if (aspect > 1) h = size / aspect;
+      else if (aspect < 1) w = size * aspect;
+      const x = (size - w) / 2;
+      const y = (size - h) / 2;
+      ctx.drawImage(img, x, y, w, h);
+
+      const outBlob = await canvasToBlob(canvas, f.options.format, 0.95);
+      const baseName = stripExt(f.file.name);
+      f.results.push({ name: `${baseName}-${size}.${f.options.format}`, blob: outBlob });
+    }
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// ============ PDF CONVERTER ============
+async function convertPdf(f) {
+  if (!window.pdfjsLib) throw new Error('PDF library not loaded');
+  setStatus(f, 'converting', 'loading pdf...');
+  const buf = await f.file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const pageCount = pdf.numPages;
+  const baseName = stripExt(f.file.name);
+  const padLen = String(pageCount).length;
+
+  for (let i = 1; i <= pageCount; i++) {
+    setStatus(f, 'converting', `page ${i}/${pageCount}...`);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: f.options.scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (f.options.format === 'jpg') {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await canvasToBlob(canvas, f.options.format, 0.92);
+    const pageNum = String(i).padStart(padLen, '0');
+    f.results.push({ name: `${baseName}-page-${pageNum}.${f.options.format}`, blob });
+  }
+}
+
+// ============ AUDIO CONVERTER ============
+let lameLoaded = null;
+async function loadLame() {
+  if (lameLoaded) return lameLoaded;
+  lameLoaded = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+    script.onload = () => {
+      if (window.lamejs) resolve(window.lamejs);
+      else reject(new Error('lamejs failed to initialize'));
+    };
+    script.onerror = () => reject(new Error('Could not load MP3 encoder'));
+    document.head.appendChild(script);
+  });
+  return lameLoaded;
+}
+
+async function convertAudio(f) {
+  setStatus(f, 'converting', 'decoding audio...');
+  const buf = await f.file.arrayBuffer();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(buf.slice(0));
+  } catch (err) {
+    throw new Error(`Browser couldn't decode this audio (${f.ext}). Try WAV/MP3/AIF/OGG.`);
+  }
+  const baseName = stripExt(f.file.name);
+
+  if (f.options.format === 'wav') {
+    setStatus(f, 'converting', 'encoding wav...');
+    const wav = encodeWav(decoded);
+    f.results.push({ name: `${baseName}.wav`, blob: new Blob([wav], { type: 'audio/wav' }) });
+  } else if (f.options.format === 'mp3') {
+    setStatus(f, 'converting', 'loading mp3 encoder...');
+    await loadLame();
+    setStatus(f, 'converting', 'encoding mp3...');
+    const mp3 = encodeMp3(decoded, f.options.mp3Bitrate);
+    f.results.push({ name: `${baseName}.mp3`, blob: new Blob([mp3], { type: 'audio/mp3' }) });
+  }
+  ctx.close && ctx.close();
+}
+
+// WAV encoder (16-bit PCM)
+function encodeWav(audioBuffer) {
+  const numCh = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = numCh * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  function writeStr(off, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i));
+  }
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true); // bits per sample
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // Interleave channels and write samples
+  const channels = [];
+  for (let c = 0; c < numCh; c++) channels.push(audioBuffer.getChannelData(c));
+
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let c = 0; c < numCh; c++) {
+      let s = Math.max(-1, Math.min(1, channels[c][i]));
+      s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      view.setInt16(offset, s, true);
+      offset += 2;
+    }
+  }
+  return buffer;
+}
+
+// MP3 encoder via lamejs
+function encodeMp3(audioBuffer, kbps) {
+  const numCh = Math.min(audioBuffer.numberOfChannels, 2);
+  const sampleRate = audioBuffer.sampleRate;
+  const encoder = new lamejs.Mp3Encoder(numCh, sampleRate, kbps);
+
+  // lamejs expects Int16 PCM
+  const left = audioBuffer.getChannelData(0);
+  const right = numCh > 1 ? audioBuffer.getChannelData(1) : null;
+  const samples = audioBuffer.length;
+
+  const leftI16 = new Int16Array(samples);
+  const rightI16 = right ? new Int16Array(samples) : null;
+  for (let i = 0; i < samples; i++) {
+    let l = Math.max(-1, Math.min(1, left[i]));
+    leftI16[i] = l < 0 ? l * 0x8000 : l * 0x7FFF;
+    if (right) {
+      let r = Math.max(-1, Math.min(1, right[i]));
+      rightI16[i] = r < 0 ? r * 0x8000 : r * 0x7FFF;
+    }
+  }
+
+  const blockSize = 1152;
+  const chunks = [];
+  for (let i = 0; i < samples; i += blockSize) {
+    const lChunk = leftI16.subarray(i, i + blockSize);
+    let buf;
+    if (right) {
+      const rChunk = rightI16.subarray(i, i + blockSize);
+      buf = encoder.encodeBuffer(lChunk, rChunk);
+    } else {
+      buf = encoder.encodeBuffer(lChunk);
+    }
+    if (buf.length > 0) chunks.push(buf);
+  }
+  const tail = encoder.flush();
+  if (tail.length > 0) chunks.push(tail);
+
+  // Concatenate
+  let total = 0;
+  chunks.forEach(c => total += c.length);
+  const out = new Uint8Array(total);
+  let off = 0;
+  chunks.forEach(c => { out.set(c, off); off += c.length; });
+  return out;
+}
+
+// ============ DOWNLOAD ============
+async function downloadResults(f) {
+  if (f.results.length === 1) {
+    const r = f.results[0];
+    saveBlob(r.blob, r.name);
+  } else {
+    if (!window.JSZip) throw new Error('Zip library not loaded');
+    const zip = new JSZip();
+    f.results.forEach(r => zip.file(r.name, r.blob));
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const baseName = stripExt(f.file.name);
+    saveBlob(zipBlob, `${baseName}-converted.zip`);
+  }
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ============ HELPERS ============
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not load image'));
+    img.src = src;
+  });
+}
+
+function canvasToBlob(canvas, format, quality) {
+  return new Promise((resolve, reject) => {
+    const mime = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas encoding failed')), mime, quality);
+  });
+}
+
+function stripExt(name) {
+  return name.replace(/\.[^.]+$/, '');
+}
+</script>
+</body>
+</html>
