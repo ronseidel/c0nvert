@@ -1,0 +1,40 @@
+# Cloudflare Pages headers for c0nvert
+#
+# IMPORTANT — Cross-Origin Isolation:
+# c0nvert's video re-encode path (WebM ↔ MP4/MOV) uses ffmpeg.wasm, which
+# requires SharedArrayBuffer. SharedArrayBuffer is gated behind cross-origin
+# isolation, which means the document MUST set:
+#   Cross-Origin-Opener-Policy: same-origin
+#   Cross-Origin-Embedder-Policy: require-corp
+# Without these, video re-encoding silently fails at "SharedArrayBuffer is
+# not defined" and the user has to retry. MP4↔MOV stream-copy still works
+# either way (pure JS, no SAB), but re-encoding does not.
+#
+# COEP: require-corp will BLOCK any cross-origin resource that doesn't send
+# `Cross-Origin-Resource-Policy: cross-origin` or CORS headers. The CDNs we
+# use (cdnjs, jsdelivr, unpkg) all send CORP, so script loads work.
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  X-Frame-Options: SAMEORIGIN
+
+# index.html / versioned HTML — must NOT cache so deploys land immediately
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Static assets — cache for 30 days
+/og.png
+  Cache-Control: public, max-age=2592000, immutable
+
+/favicon.png
+  Cache-Control: public, max-age=2592000, immutable
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=2592000, immutable
